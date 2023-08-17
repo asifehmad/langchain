@@ -37,10 +37,12 @@ jobs:
           #
           # Important considerations:
           # - We only want to alter mtimes for Python files, since that's all black checks.
+          # - We don't need to alter mtimes for directories, even if they contain Python files,
+          #   since black doesn't look at those.
           # - We also only alter mtimes inside the `WORKDIR` since that's all we'll lint.
           # - This should run before `poetry install`, because poetry's venv also contains
           #   Python files, and we don't want to alter their mtimes since they aren't linted.
-          .github/tools/git-restore-mtime "$WORKDIR/**/*.py"
+          .github/tools/git-restore-mtime --no-directories "$WORKDIR/**/*.py"
       - uses: actions/cache@v3
         id: cache-pip
         name: Cache langchain editable pip install - ${{ matrix.python-version }}
