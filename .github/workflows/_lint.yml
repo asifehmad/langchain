@@ -23,6 +23,24 @@ jobs:
           - "3.11"
     steps:
       - uses: actions/checkout@v3
+      - name: Restore workdir file mtimes to last-edited commit date
+        # This is needed to make black caching work.
+        # Black's cache uses file (mtime, size) to check whether a lookup is a cache hit.
+        # Without this command, files in the repo would have the current time as the modified time,
+        # since the previous action step just created them.
+        # This command resets the mtime to the last time the files were modified in git instead,
+        # which is a high-quality and stable representation of the last modification date.
+        env:
+          WORKDIR: ${{ inputs.working-directory == '' && '.' || inputs.working-directory }}
+        run: |
+          # This command runs at base of the repo, since we never `cd` to the `WORKDIR`.
+          #
+          # Important considerations:
+          # - We only want to alter mtimes for Python files, since that's all black checks.
+          # - We also only alter mtimes inside the `WORKDIR` since that's all we'll lint.
+          # - This should run before `poetry install`, because poetry's venv also contains
+          #   Python files, and we don't want to alter their mtimes since they aren't linted.
+          .github/tools/git-restore-mtime "$WORKDIR/**/*.py"
       - uses: actions/cache@v3
         id: cache-pip
         name: Cache langchain editable pip install - ${{ matrix.python-version }}
@@ -53,7 +71,7 @@ jobs:
         if: ${{ inputs.working-directory != 'langchain' }}
         run: |
           pip install -e ../langchain
-      - name: Get .mypy_cache to speed up mypy
+      - name: Get mypy and black caches to speed up formatting
         uses: actions/cache@v3
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MIN: "15"
@@ -61,9 +79,12 @@ jobs:
         with:
           path: |
             ${{ env.WORKDIR }}/.mypy_cache
-          key: mypy-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/poetry.lock', env.WORKDIR)) }}
+            ${{ env.WORKDIR }}/.black_cache
+          key: mypy-black-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/poetry.lock', env.WORKDIR)) }}
 
       - name: Analysing the code with our lint
         working-directory: ${{ inputs.working-directory }}
+        env:
+          BLACK_CACHE_DIR: .black_cache
         run: |
           make lint
