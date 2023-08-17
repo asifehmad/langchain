@@ -33,6 +33,9 @@ jobs:
         env:
           WORKDIR: ${{ inputs.working-directory == '' && '.' || inputs.working-directory }}
         run: |
+          git log
+          ls -alh "$WORKDIR/tests/unit_tests/"
+
           # This command runs at base of the repo, since we never `cd` to the `WORKDIR`.
           #
           # Important considerations:
@@ -42,7 +45,9 @@ jobs:
           # - We also only alter mtimes inside the `WORKDIR` since that's all we'll lint.
           # - This should run before `poetry install`, because poetry's venv also contains
           #   Python files, and we don't want to alter their mtimes since they aren't linted.
-          .github/tools/git-restore-mtime --no-directories "$WORKDIR/**/*.py"
+          .github/tools/git-restore-mtime --no-directories --first-parent "$WORKDIR/**/*.py"
+
+          ls -alh "$WORKDIR/tests/unit_tests/"
       - uses: actions/cache@v3
         id: cache-pip
         name: Cache langchain editable pip install - ${{ matrix.python-version }}
