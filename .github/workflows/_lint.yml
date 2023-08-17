@@ -23,6 +23,9 @@ jobs:
           - "3.11"
     steps:
       - uses: actions/checkout@v3
+        with:
+          # fetch the most recent 100 commits, to allow the mtime-changing script
+          fetch-depth: 100
       - name: Restore workdir file mtimes to last-edited commit date
         # This is needed to make black caching work.
         # Black's cache uses file (mtime, size) to check whether a lookup is a cache hit.
@@ -33,19 +36,23 @@ jobs:
         env:
           WORKDIR: ${{ inputs.working-directory == '' && '.' || inputs.working-directory }}
         run: |
-          git log
-          ls -alh "$WORKDIR/tests/unit_tests/"
-
-          # This command runs at base of the repo, since we never `cd` to the `WORKDIR`.
+          #
           #
           # Important considerations:
+          # - These commands run at base of the repo, since we never `cd` to the `WORKDIR`.
           # - We only want to alter mtimes for Python files, since that's all black checks.
           # - We don't need to alter mtimes for directories, even if they contain Python files,
           #   since black doesn't look at those.
           # - We also only alter mtimes inside the `WORKDIR` since that's all we'll lint.
           # - This should run before `poetry install`, because poetry's venv also contains
           #   Python files, and we don't want to alter their mtimes since they aren't linted.
-          .github/tools/git-restore-mtime --no-directories --first-parent "$WORKDIR/**/*.py"
+
+          ls -alh "$WORKDIR/tests/unit_tests/"
+
+          # First, make the last-modified time for all workdir Python files be 2020-01-01 00:00:00.
+          find "$WORKDIR" -name '*.py' -exec touch -c -m -t '202001010000' '{}' '+'
+
+          .github/tools/git-restore-mtime --no-directories --skip-missing "$WORKDIR/**/*.py"
 
           ls -alh "$WORKDIR/tests/unit_tests/"
       - uses: actions/cache@v3
